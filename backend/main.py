@@ -24,6 +24,15 @@ class EncuestaLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     respuestas = Column(JSON) 
 
+class EventoLog(Base):
+    __tablename__ = "eventos_raw"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String)
+    session_id = Column(String)
+    event_type = Column(String)
+    timestamp = Column(DateTime)
+    properties = Column(JSON)
+
 class Prueba(Base):
     __tablename__ = "pruebas"
     id = Column(Integer, primary_key=True, index=True)
@@ -88,6 +97,19 @@ class LoginSchema(BaseModel):
     username: str
     password: str
 
+class EventoSchema(BaseModel):
+    event: str
+    user_id: str
+    session_id: Optional[str] = "default"
+    timestamp: datetime
+    properties: Dict[str, Any]
+
+class SubmissionPayload(BaseModel):
+    session_id: str
+    prueba_id: str
+    respuestas: Dict[str, Any]
+    log_file: List[EventoSchema]
+
 # --- 4. CONFIGURACIÓN APP ---
 SECRET_KEY = "mi_clave_secreta_super_segura_"
 app = FastAPI(title="HCAI Dashboard API")
@@ -113,21 +135,28 @@ SCALES = {"a": 100, "b": 75, "c": 50, "d": 25, "e": 0}
 def calcular_score_hcai(respuestas):
     scores = {"confianza": [], "explicabilidad": [], "carga_cognitiva": []}
     for key, value in respuestas.items():
-        if key.startswith("p"):
-            val = SCALES.get(value, 50)
-            if key in ["p1_confianza", "p2_predecible", "p3_fiabilidad", "p4_seguridad"]:
-                scores["confianza"].append(val)
-            else:
-                scores["explicabilidad"].append(val)
-        elif key.startswith("nasa"):
+        if key.startswith("nasa"):
             try:
-                scores["carga_cognitiva"].append(100 - int(value))
-            except: pass
+                scores["carga_cognitiva"].append(int(value))
+            except:
+                pass
+        elif key.startswith("p"):
+            val = SCALES.get(value, 50)
+            # p1–p4 → confianza, p5–p15 → explicabilidad
+            try:
+                num = int(key.split("_")[0][1:])
+                if num <= 4:
+                    scores["confianza"].append(val)
+                else:
+                    scores["explicabilidad"].append(val)
+            except:
+                scores["explicabilidad"].append(val)
+
     avg = lambda l: sum(l) / len(l) if l else 0
     return {
-        "conf": avg(scores["confianza"]),
-        "expl": avg(scores["explicabilidad"]),
-        "cogn": avg(scores["carga_cognitiva"])
+        "conf": round(avg(scores["confianza"]), 1),
+        "expl": round(avg(scores["explicabilidad"]), 1),
+        "cogn": round(avg(scores["carga_cognitiva"]), 1)
     }
 
 # --- 6. ENDPOINTS ---
@@ -140,10 +169,43 @@ def login(credenciales: LoginSchema):
     raise HTTPException(status_code=401, detail="Error de login")
 
 @app.post("/api/submit-survey")
-def guardar_encuesta(datos: EncuestaSchema, db: Session = Depends(get_db)):
-    db.add(EncuestaLog(session_id=datos.session_id, respuestas=datos.respuestas))
+def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_db)):
+    # 1. Guardar la encuesta (Datos subjetivos)
+    nueva_encuesta = EncuestaLog(session_id=datos.session_id, respuestas=datos.respuestas)
+    db.add(nueva_encuesta)
+
+    # 2. Procesar los logs recibidos (Datos objetivos)
+    total_errores = 0
+    tiempo_total_ms = 0
+    num_eventos = len(datos.log_file)
+
+    for evento in datos.log_file:
+        nuevo_evento = EventoLog(
+            user_id=evento.user_id,
+            session_id=datos.session_id,
+            event_type=evento.event,
+            timestamp=evento.timestamp,
+            properties=evento.properties
+        )
+        db.add(nuevo_evento)
+        total_errores += evento.properties.get("errors", 0)
+        tiempo_total_ms += evento.properties.get("time_to_complete", 0)
+
+    # 3. Crear el registro objetivo consolidado
+    accuracy_calculada = max(0.0, 1.0 - (total_errores / num_eventos)) if num_eventos > 0 else 0.0
+
+    metricas_obj = LogObjetivo(
+        session_id=datos.session_id,
+        prueba_id=datos.prueba_id,
+        usuario_id=datos.log_file[0].user_id if datos.log_file else "unknown",
+        tiempo_total=tiempo_total_ms / 1000,
+        numero_clics=num_eventos,
+        errores_cometidos=total_errores,
+        accuracy=accuracy_calculada
+    )
+    db.add(metricas_obj)
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Encuesta y logs procesados correctamente"}
 
 @app.post("/api/submit-metrics")
 def guardar_metricas(datos: MetricasObjetivasSchema, db: Session = Depends(get_db)):
@@ -152,61 +214,66 @@ def guardar_metricas(datos: MetricasObjetivasSchema, db: Session = Depends(get_d
     db.commit()
     return {"status": "success"}
 
+@app.post("/api/ingest-logs")
+def ingestar_logs(eventos: List[EventoSchema], db: Session = Depends(get_db)):
+    for e in eventos:
+        nuevo_evento = EventoLog(
+            user_id=e.user_id,
+            session_id=e.session_id,
+            event_type=e.event,
+            timestamp=e.timestamp,
+            properties=e.properties
+        )
+        db.add(nuevo_evento)
+    db.commit()
+    return {"status": "logs_processed", "count": len(eventos)}
+
 @app.get("/api/dashboard-metrics")
 def get_metrics(db: Session = Depends(get_db)):
-    # Obtenemos TODO de la base de datos
-    encuestas = db.query(EncuestaLog).order_by(desc(EncuestaLog.timestamp)).all()
-    logs_tecnicos = db.query(LogObjetivo).all()
+    logs_resumen = db.query(LogObjetivo).all()
+    encuestas = db.query(EncuestaLog).all()
     ultima_prueba = db.query(Prueba).order_by(desc(Prueba.id)).first()
 
-    if not encuestas:
+    if not encuestas or not logs_resumen:
         return {"total_usuarios": 0, "detalles_individuales": []}
 
+    dict_logs = {l.session_id: l for l in logs_resumen}
+    
     detalles = []
-    sum_conf = sum_expl = sum_cogn = sum_t = sum_c = sum_acc = 0
-
     for enc in encuestas:
-        hcai = calcular_score_hcai(enc.respuestas)
-        log = next((l for l in logs_tecnicos if l.session_id == enc.session_id), None)
-        
-        # Datos individuales
-        item = {
-            "session_id": enc.session_id,
-            "fecha": enc.timestamp.strftime("%d/%m/%Y %H:%M"),
-            "confianza": round(hcai["conf"], 1),
-            "explicabilidad": round(hcai["expl"], 1),
-            "carga_cognitiva": round(hcai["cogn"], 1),
-            "tiempo": log.tiempo_total if log else 0,
-            "clics": log.numero_clics if log else 0,
-            "accuracy": round((log.accuracy or 0) * 100, 1) if log else 0
-        }
-        detalles.append(item)
-        
-        # Acumular para promedios
-        sum_conf += item["confianza"]
-        sum_expl += item["explicabilidad"]
-        sum_cogn += item["carga_cognitiva"]
-        sum_t += item["tiempo"]
-        sum_c += item["clics"]
-        sum_acc += item["accuracy"]
+        if enc.session_id in dict_logs:
+            log = dict_logs[enc.session_id]
+            hcai = calcular_score_hcai(enc.respuestas)
+            detalles.append({
+                "session_id": enc.session_id,
+                "fecha": enc.timestamp.strftime("%d/%m/%Y %H:%M"),
+                "confianza": hcai["conf"],
+                "explicabilidad": hcai["expl"],
+                "carga_cognitiva": hcai["cogn"],
+                "tiempo": log.tiempo_total,
+                "errores_detectados": log.errores_cometidos,
+                "accuracy": round(log.accuracy * 100, 1) if log.accuracy else 0
+            })
 
-    n = len(encuestas)
-    gt_acc = float(ultima_prueba.metricas_seleccionadas.get("accuracy", 0)) * 100 if ultima_prueba else 0
+    n = len(detalles)
+    if n == 0:
+        return {"total_usuarios": 0, "detalles_individuales": []}
 
     return {
         "total_usuarios": n,
-        "sistema_evaluado": ultima_prueba.nombre_sistema if ultima_prueba else "N/A",
+        "sistema_evaluado": ultima_prueba.nombre_sistema if ultima_prueba else "Sistema Genérico",
         "subjetivo": {
-            "confianza": round(sum_conf / n, 2),
-            "explicabilidad": round(sum_expl / n, 2),
-            "carga_cognitiva": round(sum_cogn / n, 2)
+            "confianza": round(sum(d["confianza"] for d in detalles) / n, 2),
+            "explicabilidad": round(sum(d["explicabilidad"] for d in detalles) / n, 2),
+            "carga_cognitiva": round(sum(d["carga_cognitiva"] for d in detalles) / n, 2)
         },
         "objetivo": {
-            "tiempo_medio": round(sum_t / n, 2),
-            "clics_medio": round(sum_c / n, 1),
-            "accuracy_real_promedio": round(sum_acc / n, 2)
+            "tiempo_medio": round(sum(d["tiempo"] for d in detalles) / n, 2),
+            "accuracy_real_promedio": round(sum(d["accuracy"] for d in detalles) / n, 2)
         },
-        "evaluador": {"accuracy_esperado": gt_acc},
+        "evaluador": {
+            "accuracy_esperado": float(ultima_prueba.metricas_seleccionadas.get("accuracy", 0)) * 100 if ultima_prueba else 0
+        },
         "detalles_individuales": detalles
     }
 
@@ -214,28 +281,33 @@ def get_metrics(db: Session = Depends(get_db)):
 def get_users():
     return [{"id": "usr_001", "nombre": "Ana"}, {"id": "usr_002", "nombre": "Carlos"}]
 
-
-
+# FIX: Serializar objetos ORM a dict para evitar error 500
 @app.get("/api/pruebas-realizadas")
 def listar_pruebas(db: Session = Depends(get_db)):
-    """Añadido para que el Dashboard pueda llenar los selectores"""
-    return db.query(Prueba).all()
+    pruebas = db.query(Prueba).all()
+    return [
+        {
+            "id": p.id,
+            "nombre_sistema": p.nombre_sistema,
+            "descripcion_tarea": p.descripcion_tarea,
+            "token_version": p.token_version,
+            "fecha_creacion": p.fecha_creacion.isoformat() if p.fecha_creacion else None
+        }
+        for p in pruebas
+    ]
 
 @app.get("/api/compare-tests/{token_a}/{token_b}")
 def compare_tests(token_a: str, token_b: str, db: Session = Depends(get_db)):
     def get_summary(token):
         logs = db.query(LogObjetivo).filter(LogObjetivo.prueba_id == token).all()
-        if not logs: return {"accuracy": 0, "tiempo": 0, "confianza": 0, "nombre": token}
-        
+        if not logs:
+            return {"accuracy": 0, "tiempo": 0, "confianza": 0, "nombre": token}
         session_ids = [l.session_id for l in logs]
         encuestas = db.query(EncuestaLog).filter(EncuestaLog.session_id.in_(session_ids)).all()
-        
         avg_acc = sum(l.accuracy or 0 for l in logs) / len(logs)
         avg_time = sum(l.tiempo_total or 0 for l in logs) / len(logs)
-        
         subjetivos = [calcular_score_hcai(e.respuestas) for e in encuestas]
         avg_conf = sum(s["conf"] for s in subjetivos) / len(subjetivos) if subjetivos else 0
-        
         prueba_info = db.query(Prueba).filter(Prueba.token_version == token).first()
         return {
             "nombre": prueba_info.nombre_sistema if prueba_info else token,
@@ -246,18 +318,88 @@ def compare_tests(token_a: str, token_b: str, db: Session = Depends(get_db)):
 
     a = get_summary(token_a)
     b = get_summary(token_b)
-
-    # REESTRUCTURADO PARA RECHARTS:
     return [
         {"nombre": "Accuracy (%)", "sistemaA": a["accuracy"], "sistemaB": b["accuracy"]},
         {"nombre": "Confianza", "sistemaA": a["confianza"], "sistemaB": b["confianza"]},
         {"nombre": "Tiempo (s)", "sistemaA": a["tiempo"], "sistemaB": b["tiempo"]}
     ]
 
+@app.get("/api/log-metrics")
+def get_log_metrics(db: Session = Depends(get_db)):
+    eventos = db.query(EventoLog).all()
+    logs_obj = db.query(LogObjetivo).all()
+    ultima_prueba = db.query(Prueba).order_by(desc(Prueba.id)).first()
+
+    # ── 1. Distribución de tipos de evento ──────────────────────────────────
+    conteo_eventos: Dict[str, int] = {}
+    for e in eventos:
+        conteo_eventos[e.event_type] = conteo_eventos.get(e.event_type, 0) + 1
+    distribucion_eventos = [
+        {"evento": k, "count": v}
+        for k, v in sorted(conteo_eventos.items(), key=lambda x: -x[1])
+    ]
+
+    # ── 2. Errores e interacciones por sesión ────────────────────────────────
+    clics_por_sesion: Dict[str, int] = {}
+    errores_por_sesion_raw: Dict[str, int] = {}
+    for e in eventos:
+        sid = e.session_id or "unknown"
+        clics_por_sesion[sid] = clics_por_sesion.get(sid, 0) + 1
+        errores_por_sesion_raw[sid] = errores_por_sesion_raw.get(sid, 0) + (
+            e.properties.get("errors", 0) if isinstance(e.properties, dict) else 0
+        )
+    errores_por_sesion = [
+        {"session": sid[-8:], "clics": clics_por_sesion[sid], "errores": errores_por_sesion_raw.get(sid, 0)}
+        for sid in clics_por_sesion
+    ]
+
+    # ── 3. Tiempo por sesión vs accuracy (para ScatterChart) ─────────────────
+    tiempo_por_sesion = [
+        {
+            "tiempo_s": round(l.tiempo_total or 0, 2),
+            "accuracy": round((l.accuracy or 0) * 100, 1)
+        }
+        for l in logs_obj
+    ]
+
+    # ── 4. Resumen objetivo global ───────────────────────────────────────────
+    total_interacciones = len(eventos)
+    total_errores = sum(errores_por_sesion_raw.values())
+    tiempo_medio_s = (
+        round(sum(l.tiempo_total or 0 for l in logs_obj) / len(logs_obj), 2)
+        if logs_obj else 0
+    )
+    tasa_error_media = (
+        round(total_errores / total_interacciones, 3)
+        if total_interacciones > 0 else 0
+    )
+
+    # ── 5. Métricas del evaluador (última prueba) ────────────────────────────
+    metricas_evaluador = {}
+    if ultima_prueba and isinstance(ultima_prueba.metricas_seleccionadas, dict):
+        metricas_evaluador = {
+            k: round(float(v) * 100, 1) if k not in ("rmse", "mae", "mape") else round(float(v), 4)
+            for k, v in ultima_prueba.metricas_seleccionadas.items()
+            if v is not None
+        }
+
+    return {
+        "distribucion_eventos": distribucion_eventos,
+        "errores_por_sesion": errores_por_sesion,
+        "tiempo_por_sesion": tiempo_por_sesion,
+        "resumen_objetivo": {
+            "total_interacciones": total_interacciones,
+            "total_errores": total_errores,
+            "tiempo_medio_s": tiempo_medio_s,
+            "tasa_error_media": tasa_error_media,
+        },
+        "metricas_evaluador": metricas_evaluador,
+    }
+
+
 @app.post("/api/crear-prueba")
 def crear_prueba(datos: PruebaSchema, db: Session = Depends(get_db)):
     token = str(uuid.uuid4())[:8]
-    # CORRECCIÓN: Mapeo explícito de campos para evitar error de nombres
     nueva = Prueba(
         nombre_sistema=datos.nombre_sistema,
         descripcion_tarea=datos.descripcion_tarea,
@@ -267,4 +409,10 @@ def crear_prueba(datos: PruebaSchema, db: Session = Depends(get_db)):
     )
     db.add(nueva)
     db.commit()
-    return {"status": "success", "version_token": token, "link_generado": f"http://localhost:3000/test/{token}"}
+    # FIX: clave unificada como "token_version" (coherente con el frontend)
+    return {
+        "status": "success",
+        "token_version": token,
+        "nombre_sistema": datos.nombre_sistema,
+        "link_generado": f"http://localhost:3000/test/{token}"
+    }

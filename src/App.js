@@ -3,23 +3,63 @@ import './App.css';
 import Dashboard from './Dashboard'; 
 import EvaluatorPanel from './evaluatorPanel'; 
 
+// Genera un log de ejemplo para que el usuario pueda descargarlo si no tiene uno real
+function generarLogEjemplo(sessionId) {
+  const ahora = new Date();
+  return [
+    {
+      event: "task_start",
+      user_id: "usr_participante",
+      session_id: sessionId,
+      timestamp: new Date(ahora.getTime() - 120000).toISOString(),
+      properties: { errors: 0, time_to_complete: 0, description: "Usuario inicia la tarea" }
+    },
+    {
+      event: "interaction",
+      user_id: "usr_participante",
+      session_id: sessionId,
+      timestamp: new Date(ahora.getTime() - 90000).toISOString(),
+      properties: { errors: 0, time_to_complete: 30000, description: "Usuario interactúa con el sistema IA" }
+    },
+    {
+      event: "ai_suggestion_accepted",
+      user_id: "usr_participante",
+      session_id: sessionId,
+      timestamp: new Date(ahora.getTime() - 60000).toISOString(),
+      properties: { errors: 0, time_to_complete: 30000, description: "Usuario acepta sugerencia de la IA" }
+    },
+    {
+      event: "manual_override",
+      user_id: "usr_participante",
+      session_id: sessionId,
+      timestamp: new Date(ahora.getTime() - 30000).toISOString(),
+      properties: { errors: 1, time_to_complete: 30000, description: "Usuario corrige manualmente un resultado de la IA" }
+    },
+    {
+      event: "task_end",
+      user_id: "usr_participante",
+      session_id: sessionId,
+      timestamp: ahora.toISOString(),
+      properties: { errors: 0, time_to_complete: 30000, description: "Usuario finaliza la tarea" }
+    }
+  ];
+}
+
 function App() {
-  // --- ESTADOS DE NAVEGACIÓN Y CONFIGURACIÓN DE PRUEBA ---
   const [vista, setVista] = useState('encuesta'); 
   const [isAuthenticated, setIsAuthenticated] = useState(false); 
   const [loginError, setLoginError] = useState("");
   const [pruebasDisponibles, setPruebasDisponibles] = useState([]);
   const [pruebaSeleccionada, setPruebaSeleccionada] = useState(""); 
   const [encuestaEmpezada, setEncuestaEmpezada] = useState(false);
+  const [sessionId, setSessionId] = useState("");
 
-  // --- ESTADO DEL CRONÓMETRO Y FORMULARIO ---
   const [startTime, setStartTime] = useState(null);
   const [pasoActual, setPasoActual] = useState(1);
   const [respuestas, setRespuestas] = useState({});
   const [enviado, setEnviado] = useState(false);
-  const [metricasObjetivas, setMetricasObjetivas] = useState(null); 
+  const [logFileContent, setLogFileContent] = useState(null);
 
-  // --- DATOS ESTÁTICOS ---
   const opciones = [
     { valor: 'a', texto: 'Completamente de acuerdo' },
     { valor: 'b', texto: 'Estoy algo de acuerdo' },
@@ -58,7 +98,7 @@ function App() {
     { id: 'nasa_frustracion', titulo: 'Nivel de Frustración', desc: '¿Qué tan inseguro, desalentado o estresado se sintió?', min: 'Muy Bajo', max: 'Muy Alto' },
   ];
 
-  // --- CARGAR PRUEBAS DISPONIBLES AL INICIAR ---
+  // Cargar pruebas disponibles al iniciar
   useEffect(() => {
     fetch('http://127.0.0.1:8000/api/pruebas-realizadas')
       .then(res => res.json())
@@ -66,28 +106,6 @@ function App() {
       .catch(err => console.error("Error al traer pruebas:", err));
   }, []);
 
-  // --- INICIAR CRONÓMETRO CUANDO SE EMPIEZA LA PRUEBA SELECCIONADA ---
-  useEffect(() => {
-    if (encuestaEmpezada && !enviado) {
-        setStartTime(Date.now());
-        const baseAccuracy = Math.random() * (0.95 - 0.70) + 0.70; 
-        setMetricasObjetivas({
-            numero_clics: Math.floor(Math.random() * 20) + 5,
-            errores_cometidos: Math.floor(Math.random() * 4),
-            accuracy: parseFloat(baseAccuracy.toFixed(2)),
-            precision: parseFloat((baseAccuracy + (Math.random() * 0.1 - 0.05)).toFixed(2)),
-            recall: parseFloat((baseAccuracy + (Math.random() * 0.1 - 0.05)).toFixed(2)),
-            f1_score: parseFloat((baseAccuracy - 0.02).toFixed(2)), 
-            auc_roc: parseFloat((baseAccuracy + 0.03).toFixed(2)),
-            rmse: parseFloat((Math.random() * 5).toFixed(2)), 
-            mae: parseFloat((Math.random() * 4).toFixed(2)),
-            mape: parseFloat((Math.random() * 15).toFixed(2)), 
-            r2: parseFloat((Math.random() * (0.99 - 0.5) + 0.5).toFixed(2)) 
-        });
-    }
-  }, [encuestaEmpezada, enviado]);
-
-  // --- MANEJADORES DE NAVEGACIÓN ---
   const irSiguiente = (e) => { e?.preventDefault(); window.scrollTo(0, 0); setPasoActual(p => p + 1); };
   const irAnterior = (e) => { e?.preventDefault(); window.scrollTo(0, 0); setPasoActual(p => p - 1); };
   const irAPaso = (paso, e) => { e?.preventDefault(); window.scrollTo(0, 0); setPasoActual(paso); };
@@ -105,8 +123,12 @@ function App() {
         localStorage.setItem("admin_token", data.token);
         setIsAuthenticated(true);
         setVista('dashboard');
-      } else { setLoginError("Credenciales incorrectas"); }
-    } catch (err) { setLoginError("Error de conexión"); }
+      } else {
+        setLoginError("Credenciales incorrectas");
+      }
+    } catch (err) {
+      setLoginError("Error de conexión");
+    }
   };
 
   const handleLogout = () => {
@@ -115,43 +137,69 @@ function App() {
     setVista('encuesta');
   };
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target.result);
+        setLogFileContent(Array.isArray(json) ? json : [json]);
+      } catch (err) {
+        alert("El archivo de log no es un JSON válido. Asegúrate de que el sistema bajo prueba haya generado el log correctamente.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Descarga un log de ejemplo para pruebas
+  const descargarLogEjemplo = () => {
+    const log = generarLogEjemplo(sessionId);
+    const blob = new Blob([JSON.stringify(log, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `log_ejemplo_${sessionId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const segundosTranscurridos = Math.floor((Date.now() - startTime) / 1000);
-    const sessionId = "sesion_" + Date.now();
-    
-    // Payload con el TOKEN REAL de la prueba seleccionada
-    const payloadEncuesta = { 
-      session_id: sessionId, 
-      prueba_id: pruebaSeleccionada, // <-- VINCULACIÓN CRÍTICA
-      respuestas: { ...respuestas, tiempo_real: segundosTranscurridos } 
-    };
+    if (!logFileContent) {
+      alert("Por favor, sube el archivo de log antes de finalizar.");
+      return;
+    }
 
-    const payloadMetricas = { 
-      session_id: sessionId, 
-      prueba_id: pruebaSeleccionada, // <-- VINCULACIÓN CRÍTICA
-      usuario_id: "anonimo", 
-      ...metricasObjetivas,
-      tiempo_total: segundosTranscurridos 
+    const payload = {
+      session_id: sessionId,
+      prueba_id: pruebaSeleccionada,
+      respuestas: respuestas,
+      log_file: logFileContent
     };
 
     try {
-      const res1 = await fetch('http://127.0.0.1:8000/api/submit-survey', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadEncuesta),
-      });
-      const res2 = await fetch('http://127.0.0.1:8000/api/submit-metrics', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadMetricas),
+      const res = await fetch('http://127.0.0.1:8000/api/submit-survey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
-      if (res1.ok && res2.ok) { setEnviado(true); window.scrollTo(0, 0); }
-    } catch (err) { alert("Error al guardar datos"); }
+      if (res.ok) {
+        setEnviado(true);
+        window.scrollTo(0, 0);
+      } else {
+        const errorData = await res.json();
+        console.error("Error del servidor:", errorData);
+        alert("Error al enviar: " + JSON.stringify(errorData.detail));
+      }
+    } catch (err) {
+      alert("Error de conexión con el servidor");
+    }
   };
 
   const handleChange = (id, valor) => setRespuestas({ ...respuestas, [id]: valor });
 
-  // --- RENDERIZADO DE COMPONENTES ---
   const renderPreguntaRadio = (p, i) => (
     <div className={`question-card slide-up ${respuestas[p.id] ? 'answered' : ''}`} key={p.id} style={{ animationDelay: `${i * 0.1}s` }}>
       <h4 className="question-text">{p.texto}</h4>
@@ -173,11 +221,16 @@ function App() {
       <div className="slider-container">
         <input type="range" min="0" max="100" value={respuestas[p.id] || 50} className="slider" onChange={(e) => handleChange(p.id, e.target.value)} />
         <div className="slider-labels">
-          <span>{p.min}</span><span className="slider-value-preview">{respuestas[p.id] || 50}/100</span><span>{p.max}</span>
+          <span>{p.min}</span>
+          <span className="slider-value-preview">{respuestas[p.id] || 50}/100</span>
+          <span>{p.max}</span>
         </div>
       </div>
     </div>
   );
+
+  // Obtiene los datos de la prueba seleccionada (para mostrar descripción)
+  const pruebActual = pruebasDisponibles.find(p => p.token_version === pruebaSeleccionada);
 
   return (
     <div className="App">
@@ -185,60 +238,91 @@ function App() {
         <div className="nav-content">
           <span className="brand">HCAI Research Lab</span>
           <div className="nav-links">
-            <button className={`nav-btn ${vista === 'encuesta' ? 'active' : ''}`} onClick={() => {setVista('encuesta'); setPasoActual(1); setEncuestaEmpezada(false);}}>Evaluación</button>
+            <button
+              className={`nav-btn ${vista === 'encuesta' ? 'active' : ''}`}
+              onClick={() => { setVista('encuesta'); setPasoActual(1); setEncuestaEmpezada(false); }}
+            >
+              Evaluación
+            </button>
             {isAuthenticated ? (
               <>
                 <button className={`nav-btn ${vista === 'dashboard' ? 'active' : ''}`} onClick={() => setVista('dashboard')}>Dashboard</button>
                 <button className={`nav-btn ${vista === 'evaluador' ? 'active' : ''}`} onClick={() => setVista('evaluador')}>Configurar</button>
-                <button className="nav-btn" onClick={handleLogout} style={{color: '#dc2626'}}>Salir</button>
+                <button className="nav-btn" onClick={handleLogout} style={{ color: '#dc2626' }}>Salir</button>
               </>
-            ) : <button className={`nav-btn ${vista === 'login' ? 'active' : ''}`} onClick={() => setVista('login')}>Admin</button>}
+            ) : (
+              <button className={`nav-btn ${vista === 'login' ? 'active' : ''}`} onClick={() => setVista('login')}>Admin</button>
+            )}
           </div>
         </div>
       </nav>
 
       <main className="main-content">
-        {/* VISTA DE LOGIN */}
+        {/* LOGIN */}
         {vista === 'login' && (
-          <div className="survey-container fade-in" style={{maxWidth: '400px', margin: '50px auto'}}>
+          <div className="survey-container fade-in" style={{ maxWidth: '400px', margin: '50px auto' }}>
             <h2>Acceso Investigador</h2>
-            <form onSubmit={handleLogin} style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <input type="text" name="username" placeholder="Usuario" required className="metric-input" />
               <input type="password" name="password" placeholder="Contraseña" required className="metric-input" />
-              {loginError && <p style={{color: 'red'}}>{loginError}</p>}
+              {loginError && <p style={{ color: 'var(--error)' }}>{loginError}</p>}
               <button type="submit" className="primary-btn">Entrar</button>
             </form>
           </div>
         )}
 
-        {/* VISTAS DE ADMINISTRACIÓN (Protegidas) */}
         {isAuthenticated && vista === 'dashboard' && <Dashboard />}
         {isAuthenticated && vista === 'evaluador' && <EvaluatorPanel />}
 
-        {/* VISTA DE ENCUESTA (Solo aquí debe actuar el estado 'enviado') */}
+        {/* ENCUESTA */}
         {vista === 'encuesta' && (
           !enviado ? (
             !encuestaEmpezada ? (
-              /* PANTALLA DE SELECCIÓN INICIAL */
-              <div className="survey-container fade-in" style={{textAlign: 'center', maxWidth: '600px', margin: '50px auto'}}>
-                <h1>Bienvenido al Experimento</h1>
-                <p>Selecciona el sistema que vas a evaluar para comenzar:</p>
-                <select 
-                  value={pruebaSeleccionada} 
+              /* SELECCIÓN INICIAL + DESCRIPCIÓN DE TAREA */
+              <div className="survey-container fade-in" style={{ textAlign: 'center', maxWidth: '640px', margin: '50px auto' }}>
+                <h1 style={{ color: 'var(--text-main)' }}>Bienvenido al Experimento</h1>
+                <p style={{ color: 'var(--text-muted)' }}>Selecciona el sistema que vas a evaluar para ver tu tarea asignada:</p>
+
+                <select
+                  value={pruebaSeleccionada}
                   onChange={(e) => setPruebaSeleccionada(e.target.value)}
                   className="metric-input"
-                  style={{width: '100%', padding: '15px', fontSize: '1.2rem', margin: '20px 0', borderRadius: '10px'}}
+                  style={{ width: '100%', padding: '15px', fontSize: '1.1rem', margin: '20px 0', borderRadius: '10px' }}
                 >
-                  <option value="">-- Elija una versión --</option>
+                  <option value="">-- Elige una versión --</option>
                   {pruebasDisponibles.map(p => (
                     <option key={p.token_version} value={p.token_version}>{p.nombre_sistema}</option>
                   ))}
                 </select>
-                <button 
-                  disabled={!pruebaSeleccionada} 
-                  className="primary-btn" 
-                  onClick={() => setEncuestaEmpezada(true)}
-                  style={{width: '100%', padding: '15px'}}
+
+                {/* FIX: mostrar descripción de la tarea al usuario */}
+                {pruebActual && pruebActual.descripcion_tarea && (
+                  <div style={{
+                    background: 'rgba(99, 102, 241, 0.1)',
+                    border: '1px solid var(--accent-primary)',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    margin: '0 0 25px 0',
+                    textAlign: 'left'
+                  }}>
+                    <p style={{ color: 'var(--accent-primary)', fontWeight: '700', margin: '0 0 8px 0', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                      📋 Tu tarea
+                    </p>
+                    <p style={{ color: 'var(--text-main)', margin: 0, lineHeight: '1.6' }}>
+                      {pruebActual.descripcion_tarea}
+                    </p>
+                  </div>
+                )}
+
+                <button
+                  disabled={!pruebaSeleccionada}
+                  className="primary-btn"
+                  onClick={() => {
+                    const sid = "sesion_" + Date.now();
+                    setEncuestaEmpezada(true);
+                    setSessionId(sid);
+                    setStartTime(Date.now());
+                  }}
                 >
                   Comenzar Evaluación
                 </button>
@@ -247,7 +331,7 @@ function App() {
               /* FORMULARIO DE PASOS */
               <form onSubmit={handleSubmit} className="survey-form">
                 <header className="form-header">
-                  <h1>Evaluando: {pruebasDisponibles.find(p => p.token_version === pruebaSeleccionada)?.nombre_sistema}</h1>
+                  <h1>Evaluando: {pruebActual?.nombre_sistema}</h1>
                   <div className="progress-container">
                     <div className={`step-item ${pasoActual >= 1 ? 'active' : ''}`} onClick={(e) => irAPaso(1, e)}>1</div>
                     <div className="step-line"></div>
@@ -257,23 +341,100 @@ function App() {
                   </div>
                 </header>
 
-                {pasoActual === 1 && <div className="section-container fade-in"><h3 className="section-title">Confianza</h3><div className="questions-grid">{preguntasParte1.map(renderPreguntaRadio)}</div></div>}
-                {pasoActual === 2 && <div className="section-container fade-in"><h3 className="section-title">Explicabilidad</h3><div className="questions-grid">{preguntasParte2.map(renderPreguntaRadio)}</div></div>}
-                {pasoActual === 3 && <div className="section-container fade-in"><h3 className="section-title">Carga Cognitiva</h3><div className="questions-grid">{preguntasNASA.map(renderPreguntaSlider)}</div></div>}
+                {pasoActual === 1 && (
+                  <div className="section-container fade-in">
+                    <h3 className="section-title">Confianza</h3>
+                    <div className="questions-grid">{preguntasParte1.map(renderPreguntaRadio)}</div>
+                  </div>
+                )}
+                {pasoActual === 2 && (
+                  <div className="section-container fade-in">
+                    <h3 className="section-title">Explicabilidad</h3>
+                    <div className="questions-grid">{preguntasParte2.map(renderPreguntaRadio)}</div>
+                  </div>
+                )}
+                {pasoActual === 3 && (
+                  <div className="section-container fade-in">
+                    <h3 className="section-title">Carga Cognitiva</h3>
+                    <div className="questions-grid">
+                      {preguntasNASA.map(renderPreguntaSlider)}
+                    </div>
+
+                    {/* FIX: sección log con estilos dark */}
+                    <div style={{
+                      marginTop: '40px',
+                      padding: '25px',
+                      border: '2px dashed var(--accent-primary)',
+                      borderRadius: '12px',
+                      textAlign: 'center',
+                      background: 'rgba(99, 102, 241, 0.05)'
+                    }}>
+                      <h4 style={{ color: 'var(--text-main)', marginTop: 0 }}>📂 Subir Log de la Tarea</h4>
+                      <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                        Selecciona el archivo JSON generado por el sistema bajo prueba.
+                      </p>
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleFileUpload}
+                        style={{ marginTop: '10px', color: 'var(--text-muted)' }}
+                      />
+                      {logFileContent ? (
+                        <p style={{ color: 'var(--accent-secondary)', marginTop: '10px' }}>
+                          ✅ Log cargado ({logFileContent.length} eventos)
+                        </p>
+                      ) : (
+                        <div style={{ marginTop: '15px' }}>
+                          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                            ¿No tienes un log? Descarga un log de ejemplo para pruebas:
+                          </p>
+                          <button
+                            type="button"
+                            className="secondary-btn"
+                            onClick={descargarLogEjemplo}
+                            style={{ marginTop: '8px', cursor: 'pointer' }}
+                          >
+                            ⬇️ Descargar Log de Ejemplo
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="actions step-actions">
-                  {pasoActual > 1 && <button type="button" className="secondary-btn" onClick={irAnterior}>← Anterior</button>}
-                  {pasoActual < 3 ? <button type="button" className="primary-btn" onClick={irSiguiente}>Siguiente →</button> : <button type="submit" className="primary-btn btn-finish" style={{backgroundColor: '#10B981'}}>Finalizar ✓</button>}
+                  {pasoActual > 1 && (
+                    <button type="button" className="secondary-btn" onClick={irAnterior}>← Anterior</button>
+                  )}
+                  {pasoActual < 3 ? (
+                    <button type="button" className="primary-btn" onClick={irSiguiente}>Siguiente →</button>
+                  ) : (
+                    <button type="submit" className="primary-btn btn-finish" style={{ backgroundColor: '#10B981' }}>
+                      Finalizar ✓
+                    </button>
+                  )}
                 </div>
               </form>
             )
           ) : (
-            /* CARTEL DE ÉXITO (Solo visible tras terminar encuesta) */
+            /* ÉXITO */
             <div className="success-card fade-in">
               <div className="icon-check">✓</div>
               <h2>¡Muchas gracias!</h2>
-              <p>Tus datos se han guardado en la versión seleccionada.</p>
-              <button className="primary-btn" onClick={() => {setEnviado(false); setEncuestaEmpezada(false); setPruebaSeleccionada(""); setRespuestas({}); setPasoActual(1);}}>Nueva Evaluación</button>
+              <p>Tus datos se han guardado correctamente.</p>
+              <button
+                className="primary-btn"
+                onClick={() => {
+                  setEnviado(false);
+                  setEncuestaEmpezada(false);
+                  setPruebaSeleccionada("");
+                  setRespuestas({});
+                  setPasoActual(1);
+                  setLogFileContent(null);
+                }}
+              >
+                Nueva Evaluación
+              </button>
             </div>
           )
         )}

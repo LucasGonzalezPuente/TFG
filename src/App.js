@@ -50,7 +50,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false); 
   const [loginError, setLoginError] = useState("");
   const [pruebasDisponibles, setPruebasDisponibles] = useState([]);
-  const [pruebaSeleccionada, setPruebaSeleccionada] = useState(""); 
+  const [pruebaSeleccionada, setPruebaSeleccionada] = useState(null); // ahora es el id numérico
   const [encuestaEmpezada, setEncuestaEmpezada] = useState(false);
   const [sessionId, setSessionId] = useState("");
 
@@ -173,7 +173,7 @@ function App() {
 
     const payload = {
       session_id: sessionId,
-      prueba_id: pruebaSeleccionada,
+      prueba_id: Number(pruebaSeleccionada),  // FK entera → pruebas.id
       respuestas: respuestas,
       log_file: logFileContent
     };
@@ -230,7 +230,7 @@ function App() {
   );
 
   // Obtiene los datos de la prueba seleccionada (para mostrar descripción)
-  const pruebActual = pruebasDisponibles.find(p => p.token_version === pruebaSeleccionada);
+  const pruebActual = pruebasDisponibles.find(p => p.id === Number(pruebaSeleccionada));
 
   return (
     <div className="App">
@@ -291,7 +291,7 @@ function App() {
                 >
                   <option value="">-- Elige una versión --</option>
                   {pruebasDisponibles.map(p => (
-                    <option key={p.token_version} value={p.token_version}>{p.nombre_sistema}</option>
+                    <option key={p.id} value={p.id}>{p.nombre_sistema}</option>
                   ))}
                 </select>
 
@@ -427,7 +427,7 @@ function App() {
                 onClick={() => {
                   setEnviado(false);
                   setEncuestaEmpezada(false);
-                  setPruebaSeleccionada("");
+                  setPruebaSeleccionada(null);
                   setRespuestas({});
                   setPasoActual(1);
                   setLogFileContent(null);

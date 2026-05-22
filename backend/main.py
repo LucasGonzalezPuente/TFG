@@ -1,13 +1,15 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, JSON, DateTime, Float, desc
+from sqlalchemy import create_engine, Column, Integer, String, JSON, DateTime, Float, desc, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 from typing import Dict, Any, List, Optional 
 import uuid
 import jwt
+
+# Swagger --> http://localhost:8000/docs
 
 # --- 1. CONFIGURACIÓN DE BASE DE DATOS ---
 DATABASE_URL = "postgresql://postgres:root@localhost/hcai_db"
@@ -17,22 +19,8 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 # --- 2. MODELOS ---
-class EncuestaLog(Base):
-    __tablename__ = "encuestas"
-    id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    respuestas = Column(JSON) 
 
-class EventoLog(Base):
-    __tablename__ = "eventos_raw"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(String)
-    session_id = Column(String)
-    event_type = Column(String)
-    timestamp = Column(DateTime)
-    properties = Column(JSON)
-
+# Prueba se define primero porque el resto la referencian
 class Prueba(Base):
     __tablename__ = "pruebas"
     id = Column(Integer, primary_key=True, index=True)
@@ -43,11 +31,33 @@ class Prueba(Base):
     token_version = Column(String, unique=True, index=True)
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
 
+class EncuestaLog(Base):
+    __tablename__ = "encuestas"
+    id = Column(Integer, primary_key=True, index=True)
+    # FK → pruebas.id: cada encuesta pertenece a una prueba concreta
+    prueba_id = Column(Integer, ForeignKey("pruebas.id"), nullable=False)
+    # session_id único: es la clave de vinculación con eventos_raw y logs_objetivos
+    session_id = Column(String, unique=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    respuestas = Column(JSON)
+
+class EventoLog(Base):
+    __tablename__ = "eventos_raw"
+    id = Column(Integer, primary_key=True, index=True)
+    # FK → encuestas.session_id: cada evento pertenece a una sesión de encuesta
+    session_id = Column(String, ForeignKey("encuestas.session_id"), nullable=False)
+    user_id = Column(String)
+    event_type = Column(String)
+    timestamp = Column(DateTime)
+    properties = Column(JSON)
+
 class LogObjetivo(Base):
     __tablename__ = "logs_objetivos"
     id = Column(Integer, primary_key=True, index=True)
-    session_id = Column(String, index=True)
-    prueba_id = Column(String)
+    # FK → encuestas.session_id: el registro objetivo se vincula a su encuesta
+    session_id = Column(String, ForeignKey("encuestas.session_id"), nullable=False)
+    # FK → pruebas.id: permite saber a qué experimento pertenece este log
+    prueba_id = Column(Integer, ForeignKey("pruebas.id"), nullable=False)
     usuario_id = Column(String)
     tiempo_total = Column(Float)
     numero_clics = Column(Integer)
@@ -78,7 +88,7 @@ class PruebaSchema(BaseModel):
 
 class MetricasObjetivasSchema(BaseModel):
     session_id: str
-    prueba_id: str
+    prueba_id: int          # FK → pruebas.id
     usuario_id: str
     tiempo_total: float
     numero_clics: int
@@ -106,7 +116,7 @@ class EventoSchema(BaseModel):
 
 class SubmissionPayload(BaseModel):
     session_id: str
-    prueba_id: str
+    prueba_id: int          # FK → pruebas.id (antes era el token string)
     respuestas: Dict[str, Any]
     log_file: List[EventoSchema]
 
@@ -170,19 +180,29 @@ def login(credenciales: LoginSchema):
 
 @app.post("/api/submit-survey")
 def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_db)):
-    # 1. Guardar la encuesta (Datos subjetivos)
-    nueva_encuesta = EncuestaLog(session_id=datos.session_id, respuestas=datos.respuestas)
-    db.add(nueva_encuesta)
+    # 0. Verificar que la prueba existe (integridad referencial explícita)
+    prueba = db.query(Prueba).filter(Prueba.id == datos.prueba_id).first()
+    if not prueba:
+        raise HTTPException(status_code=404, detail="Prueba no encontrada")
 
-    # 2. Procesar los logs recibidos (Datos objetivos)
+    # 1. Guardar la encuesta (datos subjetivos) con FK a pruebas
+    nueva_encuesta = EncuestaLog(
+        prueba_id=prueba.id,
+        session_id=datos.session_id,
+        respuestas=datos.respuestas
+    )
+    db.add(nueva_encuesta)
+    db.flush()  # necesario para que session_id quede disponible como FK
+
+    # 2. Procesar los logs recibidos con FK a encuestas.session_id
     total_errores = 0
     tiempo_total_ms = 0
     num_eventos = len(datos.log_file)
 
     for evento in datos.log_file:
         nuevo_evento = EventoLog(
-            user_id=evento.user_id,
             session_id=datos.session_id,
+            user_id=evento.user_id,
             event_type=evento.event,
             timestamp=evento.timestamp,
             properties=evento.properties
@@ -191,12 +211,12 @@ def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_d
         total_errores += evento.properties.get("errors", 0)
         tiempo_total_ms += evento.properties.get("time_to_complete", 0)
 
-    # 3. Crear el registro objetivo consolidado
+    # 3. Crear el registro objetivo consolidado con FK a pruebas y encuestas
     accuracy_calculada = max(0.0, 1.0 - (total_errores / num_eventos)) if num_eventos > 0 else 0.0
 
     metricas_obj = LogObjetivo(
         session_id=datos.session_id,
-        prueba_id=datos.prueba_id,
+        prueba_id=prueba.id,
         usuario_id=datos.log_file[0].user_id if datos.log_file else "unknown",
         tiempo_total=tiempo_total_ms / 1000,
         numero_clics=num_eventos,
@@ -287,7 +307,7 @@ def listar_pruebas(db: Session = Depends(get_db)):
     pruebas = db.query(Prueba).all()
     return [
         {
-            "id": p.id,
+            "id": p.id,                          # FK numérica que usará el frontend
             "nombre_sistema": p.nombre_sistema,
             "descripcion_tarea": p.descripcion_tarea,
             "token_version": p.token_version,
@@ -299,18 +319,21 @@ def listar_pruebas(db: Session = Depends(get_db)):
 @app.get("/api/compare-tests/{token_a}/{token_b}")
 def compare_tests(token_a: str, token_b: str, db: Session = Depends(get_db)):
     def get_summary(token):
-        logs = db.query(LogObjetivo).filter(LogObjetivo.prueba_id == token).all()
-        if not logs:
+        prueba_info = db.query(Prueba).filter(Prueba.token_version == token).first()
+        if not prueba_info:
             return {"accuracy": 0, "tiempo": 0, "confianza": 0, "nombre": token}
+        # Filtrar logs por prueba_id entero (FK real)
+        logs = db.query(LogObjetivo).filter(LogObjetivo.prueba_id == prueba_info.id).all()
+        if not logs:
+            return {"accuracy": 0, "tiempo": 0, "confianza": 0, "nombre": prueba_info.nombre_sistema}
         session_ids = [l.session_id for l in logs]
         encuestas = db.query(EncuestaLog).filter(EncuestaLog.session_id.in_(session_ids)).all()
         avg_acc = sum(l.accuracy or 0 for l in logs) / len(logs)
         avg_time = sum(l.tiempo_total or 0 for l in logs) / len(logs)
         subjetivos = [calcular_score_hcai(e.respuestas) for e in encuestas]
         avg_conf = sum(s["conf"] for s in subjetivos) / len(subjetivos) if subjetivos else 0
-        prueba_info = db.query(Prueba).filter(Prueba.token_version == token).first()
         return {
-            "nombre": prueba_info.nombre_sistema if prueba_info else token,
+            "nombre": prueba_info.nombre_sistema,
             "accuracy": round(avg_acc * 100, 1),
             "tiempo": round(avg_time, 2),
             "confianza": round(avg_conf, 1)
@@ -320,82 +343,9 @@ def compare_tests(token_a: str, token_b: str, db: Session = Depends(get_db)):
     b = get_summary(token_b)
     return [
         {"nombre": "Accuracy (%)", "sistemaA": a["accuracy"], "sistemaB": b["accuracy"]},
-        {"nombre": "Confianza", "sistemaA": a["confianza"], "sistemaB": b["confianza"]},
-        {"nombre": "Tiempo (s)", "sistemaA": a["tiempo"], "sistemaB": b["tiempo"]}
+        {"nombre": "Confianza",    "sistemaA": a["confianza"], "sistemaB": b["confianza"]},
+        {"nombre": "Tiempo (s)",   "sistemaA": a["tiempo"],   "sistemaB": b["tiempo"]}
     ]
-
-@app.get("/api/log-metrics")
-def get_log_metrics(db: Session = Depends(get_db)):
-    eventos = db.query(EventoLog).all()
-    logs_obj = db.query(LogObjetivo).all()
-    ultima_prueba = db.query(Prueba).order_by(desc(Prueba.id)).first()
-
-    # ── 1. Distribución de tipos de evento ──────────────────────────────────
-    conteo_eventos: Dict[str, int] = {}
-    for e in eventos:
-        conteo_eventos[e.event_type] = conteo_eventos.get(e.event_type, 0) + 1
-    distribucion_eventos = [
-        {"evento": k, "count": v}
-        for k, v in sorted(conteo_eventos.items(), key=lambda x: -x[1])
-    ]
-
-    # ── 2. Errores e interacciones por sesión ────────────────────────────────
-    clics_por_sesion: Dict[str, int] = {}
-    errores_por_sesion_raw: Dict[str, int] = {}
-    for e in eventos:
-        sid = e.session_id or "unknown"
-        clics_por_sesion[sid] = clics_por_sesion.get(sid, 0) + 1
-        errores_por_sesion_raw[sid] = errores_por_sesion_raw.get(sid, 0) + (
-            e.properties.get("errors", 0) if isinstance(e.properties, dict) else 0
-        )
-    errores_por_sesion = [
-        {"session": sid[-8:], "clics": clics_por_sesion[sid], "errores": errores_por_sesion_raw.get(sid, 0)}
-        for sid in clics_por_sesion
-    ]
-
-    # ── 3. Tiempo por sesión vs accuracy (para ScatterChart) ─────────────────
-    tiempo_por_sesion = [
-        {
-            "tiempo_s": round(l.tiempo_total or 0, 2),
-            "accuracy": round((l.accuracy or 0) * 100, 1)
-        }
-        for l in logs_obj
-    ]
-
-    # ── 4. Resumen objetivo global ───────────────────────────────────────────
-    total_interacciones = len(eventos)
-    total_errores = sum(errores_por_sesion_raw.values())
-    tiempo_medio_s = (
-        round(sum(l.tiempo_total or 0 for l in logs_obj) / len(logs_obj), 2)
-        if logs_obj else 0
-    )
-    tasa_error_media = (
-        round(total_errores / total_interacciones, 3)
-        if total_interacciones > 0 else 0
-    )
-
-    # ── 5. Métricas del evaluador (última prueba) ────────────────────────────
-    metricas_evaluador = {}
-    if ultima_prueba and isinstance(ultima_prueba.metricas_seleccionadas, dict):
-        metricas_evaluador = {
-            k: round(float(v) * 100, 1) if k not in ("rmse", "mae", "mape") else round(float(v), 4)
-            for k, v in ultima_prueba.metricas_seleccionadas.items()
-            if v is not None
-        }
-
-    return {
-        "distribucion_eventos": distribucion_eventos,
-        "errores_por_sesion": errores_por_sesion,
-        "tiempo_por_sesion": tiempo_por_sesion,
-        "resumen_objetivo": {
-            "total_interacciones": total_interacciones,
-            "total_errores": total_errores,
-            "tiempo_medio_s": tiempo_medio_s,
-            "tasa_error_media": tasa_error_media,
-        },
-        "metricas_evaluador": metricas_evaluador,
-    }
-
 
 @app.post("/api/crear-prueba")
 def crear_prueba(datos: PruebaSchema, db: Session = Depends(get_db)):

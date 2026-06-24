@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HCAI · Logger de Sesión</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f0f11; --surface: #1a1a1f; --surface2: #222228;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+    --text: #e8e8ec; --muted: #8888a0; --accent: #7c6ff7;
+    --accent-dim: rgba(124,111,247,0.15); --green: #3ecf8e;
+    --green-dim: rgba(62,207,142,0.12); --red: #e24b4a;
+    --red-dim: rgba(226,75,74,0.12); --amber: #ef9f27;
+    --amber-dim: rgba(239,159,39,0.12); --radius: 10px; --radius-sm: 6px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; line-height: 1.5; }
+  header { border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 12px; background: var(--surface); }
+  .logo-dot { width: 28px; height: 28px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #fff; }
+  header h1 { font-size: 15px; font-weight: 500; }
+  header span { font-size: 13px; color: var(--muted); }
+  .session-pill { margin-left: auto; font-size: 11px; font-family: monospace; color: var(--accent); background: var(--accent-dim); padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(124,111,247,0.3); }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .card-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .card-body { padding: 16px; }
+  .sid-row { display: flex; gap: 8px; align-items: stretch; }
+  .sid-input { flex: 1; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; font-family: monospace; padding: 10px 12px; }
+  .sid-input:focus { outline: none; border-color: var(--accent); }
+  .sid-input::placeholder { color: var(--muted); font-family: inherit; }
+  .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btn { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 500; cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.1s; text-align: left; width: 100%; }
+  .btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.2); }
+  .btn:active { transform: scale(0.98); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #8c80f9; }
+  .btn.green-btn { background: var(--green-dim); border-color: rgba(62,207,142,0.4); color: var(--green); }
+  .btn.green-btn:hover { background: rgba(62,207,142,0.2); }
+  .btn.red-btn { background: var(--red-dim); border-color: rgba(226,75,74,0.4); color: var(--red); }
+  .btn.red-btn:hover { background: rgba(226,75,74,0.2); }
+  .btn.amber-btn { background: var(--amber-dim); border-color: rgba(239,159,39,0.4); color: var(--amber); }
+  .btn.amber-btn:hover { background: rgba(239,159,39,0.2); }
+  .btn.full { grid-column: 1 / -1; }
+  .btn.disabled { opacity: 0.4; pointer-events: none; }
+  .status-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface2); border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .status-running { color: var(--green); }
+  #timer { font-family: monospace; font-size: 13px; color: var(--text); min-width: 60px; text-align: right; }
+  .log-feed { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding: 4px 0; }
+  .log-feed::-webkit-scrollbar { width: 4px; }
+  .log-feed::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .log-entry { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { font-family: monospace; color: var(--muted); flex-shrink: 0; min-width: 70px; }
+  .log-type { padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 500; flex-shrink: 0; min-width: 110px; text-align: center; }
+  .type-task_start { background: rgba(124,111,247,0.2); color: var(--accent); }
+  .type-interaction { background: var(--green-dim); color: var(--green); }
+  .type-error { background: var(--red-dim); color: var(--red); }
+  .type-ai_suggestion { background: var(--amber-dim); color: var(--amber); }
+  .type-ai_suggestion_accepted { background: var(--green-dim); color: var(--green); }
+  .type-manual_override { background: rgba(62,207,142,0.08); color: #5dd4a2; border: 1px solid rgba(62,207,142,0.2); }
+  .type-task_end { background: rgba(255,255,255,0.06); color: var(--muted); }
+  .log-desc { color: var(--text); flex: 1; line-height: 1.4; }
+  .empty-state { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 13px; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .stat { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; text-align: center; }
+  .stat-val { font-size: 22px; font-weight: 600; font-family: monospace; color: var(--text); display: block; line-height: 1.2; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .stat.green .stat-val { color: var(--green); }
+  .stat.red .stat-val { color: var(--red); }
+  .stat.amber .stat-val { color: var(--amber); }
+  .stat.purple .stat-val { color: var(--accent); }
+  .note-input { width: 100%; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius-sm); color: var(--text); font-size: 13px; padding: 10px 12px; resize: none; font-family: inherit; transition: border-color 0.15s; margin-top: 10px; }
+  .note-input:focus { outline: none; border-color: var(--accent); }
+  .note-input::placeholder { color: var(--muted); }
+  .dl-info { font-size: 12px; color: var(--muted); line-height: 1.6; padding: 10px 12px; background: var(--surface2); border-radius: var(--radius-sm); border-left: 2px solid var(--accent); }
+  .alert { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; display: none; margin-bottom: 8px; }
+  .alert.show { display: block; }
+  .alert.warning { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(239,159,39,0.3); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo-dot">H</div>
+  <div>
+    <h1>HCAI Session Logger</h1>
+    <span>Registrador de interacción para evaluación de sistemas IA</span>
+  </div>
+  <div class="session-pill" id="session-display">SID: —</div>
+</header>
+
+<main>
+
+  <!-- PASO 0: PEGAR SESSION ID -->
+  <div class="card" id="sid-card">
+    <div class="card-header"><div class="dot"></div><span>Paso 1 · Identificador de sesión</span></div>
+    <div class="card-body">
+      <p style="color:var(--muted); font-size:13px; margin-bottom:12px;">
+        Copia el ID de sesión que aparece en la plataforma HCAI y pégalo aquí antes de iniciar:
+      </p>
+      <div class="sid-row">
+        <input class="sid-input" id="sid-field" placeholder="sesion_1718000000000" />
+        <button class="btn primary" onclick="confirmarSid()">Confirmar →</button>
+      </div>
+      <p style="color:var(--muted); font-size:11px; margin-top:8px;">
+        ¿No tienes un ID? Déjalo vacío y se generará uno automático (solo para pruebas).
+      </p>
+    </div>
+  </div>
+
+  <!-- CONTROLES PRINCIPALES -->
+  <div class="card">
+    <div class="card-header">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-label">Sesión no iniciada</span>
+    </div>
+    <div class="card-body">
+      <div class="btn-grid">
+        <button class="btn primary full disabled" id="btn-start" onclick="startSession()">
+          ▶ Iniciar sesión
+        </button>
+        <button class="btn green-btn disabled" id="btn-interaction" onclick="logEvent('interaction','Interacción con el sistema')">
+          ↗ Interacción / clic
+        </button>
+        <button class="btn amber-btn disabled" id="btn-suggestion" onclick="logEvent('ai_suggestion','Sugerencia mostrada por la IA')">
+          ◈ IA mostró sugerencia
+        </button>
+        <button class="btn green-btn disabled" id="btn-accepted" onclick="logEvent('ai_suggestion_accepted','Usuario aceptó sugerencia de la IA')">
+          ✓ Acepté la sugerencia
+        </button>
+        <button class="btn red-btn disabled" id="btn-rejected" onclick="logEvent('manual_override','Usuario rechazó / corrigió la sugerencia de la IA')">
+          ✕ Rechacé / corregí
+        </button>
+        <button class="btn red-btn disabled" id="btn-error" onclick="logEvent('error','Error o resultado inesperado')">
+          ⚠ Error / resultado malo
+        </button>
+        <button class="btn disabled full" id="btn-end" onclick="endSession()">
+          ⏹ Finalizar sesión
+        </button>
+      </div>
+      <textarea class="note-input" id="note-input" rows="2" placeholder="Nota libre (opcional): describe lo que hiciste ahora…" disabled></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="btn disabled" id="btn-note" style="flex:1" onclick="logNote()">📝 Registrar nota</button>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span id="status-text" style="color:var(--muted)">Confirma el ID de sesión para continuar</span>
+      <span id="timer">00:00</span>
+    </div>
+  </div>
+
+  <!-- ESTADÍSTICAS -->
+  <div class="stats-row">
+    <div class="stat purple"><span class="stat-val" id="st-events">0</span><div class="stat-label">Eventos</div></div>
+    <div class="stat green"><span class="stat-val" id="st-interactions">0</span><div class="stat-label">Interacciones</div></div>
+    <div class="stat red"><span class="stat-val" id="st-errors">0</span><div class="stat-label">Errores</div></div>
+    <div class="stat amber"><span class="stat-val" id="st-corrections">0</span><div class="stat-label">Correcciones</div></div>
+  </div>
+
+  <!-- FEED -->
+  <div class="card">
+    <div class="card-header">
+      <div class="dot" id="feed-dot"></div>
+      <span>Registro de eventos</span>
+      <span style="margin-left:auto; font-size:11px;" id="event-count">0 eventos</span>
+    </div>
+    <div class="card-body" style="padding:8px 12px;">
+      <div class="log-feed" id="log-feed">
+        <div class="empty-state">Los eventos registrados aparecerán aquí</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DESCARGA -->
+  <div class="card">
+    <div class="card-header"><div class="dot"></div><span>Exportar log</span></div>
+    <div class="card-body">
+      <div class="dl-info" style="margin-bottom:12px;">
+        El archivo JSON exportado usa el formato exacto que espera la plataforma HCAI. Súbelo en el <strong>Paso 3</strong> de la encuesta.
+      </div>
+      <div id="alert-nodone" class="alert warning">Finaliza la sesión primero antes de descargar.</div>
+      <button class="btn disabled full" id="btn-download" onclick="downloadLog()" style="justify-content:center;">
+        ⬇ Descargar log JSON
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  let sessionId = null;
+  let startTime = null;
+  let timerInterval = null;
+  let events = [];
+  let sessionEnded = false;
+  let counts = { events: 0, interactions: 0, errors: 0, corrections: 0 };
+
+  function confirmarSid() {
+    const raw = document.getElementById('sid-field').value.trim();
+    sessionId = raw || ('sesion_' + Date.now());
+    document.getElementById('session-display').textContent = 'SID: ' + sessionId.slice(-12);
+    document.getElementById('sid-card').style.opacity = '0.5';
+    document.getElementById('sid-card').style.pointerEvents = 'none';
+    document.getElementById('btn-start').classList.remove('disabled');
+    document.getElementById('status-text').textContent = 'ID confirmado — pulsa Iniciar sesión';
+  }
+
+  function formatTime(ms) {
+    const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
+    return String(m).padStart(2,'0') + ':' + String(s % 60).padStart(2,'0');
+  }
+  function formatTimestamp(ts) { return new Date(ts).toTimeString().slice(0,8); }
+
+  function setEnabled(ids, on) {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      on ? el.classList.remove('disabled') : el.classList.add('disabled');
+    });
+  }
+
+  function startSession() {
+    startTime = Date.now();
+    sessionEnded = false;
+    events = [];
+    counts = { events: 0, interactions: 0, errors: 0, corrections: 0 };
+
+    document.getElementById('btn-start').classList.add('disabled');
+    document.getElementById('note-input').disabled = false;
+    setEnabled(['btn-interaction','btn-suggestion','btn-accepted','btn-rejected','btn-error','btn-note','btn-end'], true);
+
+    const dot = document.getElementById('status-dot');
+    dot.classList.add('green');
+    document.getElementById('status-label').textContent = 'Sesión activa';
+    document.getElementById('status-text').textContent = 'Registra tus interacciones con la app';
+    document.getElementById('status-text').className = 'status-running';
+    document.getElementById('feed-dot').classList.add('green');
+
+    timerInterval = setInterval(() => {
+      document.getElementById('timer').textContent = formatTime(Date.now() - startTime);
+    }, 1000);
+
+    logEvent('task_start', 'Sesión iniciada');
+  }
+
+  function logEvent(type, description) {
+    if (!sessionId || sessionEnded) return;
+    const ts = Date.now();
+    const elapsed = ts - startTime;
+
+    // Map logger types to the event types surveys.py understands
+    // Each event needs: event, user_id, session_id, timestamp, properties
+    const event = {
+      event:      type,
+      user_id:    'usr_participante',
+      session_id: sessionId,
+      timestamp:  new Date(ts).toISOString(),
+      properties: {
+        errors:            (type === 'error' || type === 'manual_override') ? 1 : 0,
+        time_to_complete:  elapsed,
+        description:       description,
+      }
+    };
+    events.push(event);
+
+    counts.events++;
+    if (type === 'interaction' || type === 'ai_suggestion_accepted') counts.interactions++;
+    if (type === 'error') counts.errors++;
+    if (type === 'manual_override') counts.corrections++;
+
+    updateStats();
+    appendFeedEntry(type, description, ts);
+    document.getElementById('log-feed').scrollTop = 99999;
+  }
+
+  function logNote() {
+    const note = document.getElementById('note-input').value.trim();
+    if (!note) return;
+    logEvent('interaction', note);
+    document.getElementById('note-input').value = '';
+  }
+
+  function updateStats() {
+    document.getElementById('st-events').textContent = counts.events;
+    document.getElementById('st-interactions').textContent = counts.interactions;
+    document.getElementById('st-errors').textContent = counts.errors;
+    document.getElementById('st-corrections').textContent = counts.corrections;
+    document.getElementById('event-count').textContent = counts.events + ' eventos';
+  }
+
+  function appendFeedEntry(type, description, ts) {
+    const feed = document.getElementById('log-feed');
+    feed.querySelectorAll('.empty-state').forEach(e => e.remove());
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerHTML =
+      '<span class="log-time">' + formatTimestamp(ts) + '</span>' +
+      '<span class="log-type type-' + type + '">' + type + '</span>' +
+      '<span class="log-desc">' + description.replace(/</g,'&lt;') + '</span>';
+    feed.appendChild(entry);
+  }
+
+  function endSession() {
+    if (!sessionId || sessionEnded) return;
+    sessionEnded = true;
+    clearInterval(timerInterval);
+    logEvent('task_end', 'Sesión finalizada por el usuario');
+    setEnabled(['btn-interaction','btn-suggestion','btn-accepted','btn-rejected','btn-error','btn-note','btn-end'], false);
+    document.getElementById('note-input').disabled = true;
+    document.getElementById('status-dot').classList.remove('green');
+    document.getElementById('status-label').textContent = 'Sesión finalizada';
+    document.getElementById('status-text').textContent = 'Descarga el log y súbelo en el Paso 3 de la encuesta';
+    document.getElementById('status-text').className = '';
+    document.getElementById('feed-dot').classList.remove('green');
+    document.getElementById('btn-download').classList.remove('disabled');
+  }
+
+  function downloadLog() {
+    if (!sessionEnded) {
+      document.getElementById('alert-nodone').classList.add('show');
+      return;
+    }
+    document.getElementById('alert-nodone').classList.remove('show');
+    // Export as array — exactly what surveys.py expects in log_file
+    const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'hcai_log_' + sessionId + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+</script>
+</body>
+</html>

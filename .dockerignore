@@ -1,0 +1,35 @@
+# Node
+node_modules
+npm-debug.log*
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+*.egg-info
+.eggs
+
+# Build outputs
+dist
+dist-ssr
+build
+
+# Dev / editor
+.vscode
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Database files (keep out of image)
+*.db
+*.sqlite
+
+# Git
+.git
+.gitignore

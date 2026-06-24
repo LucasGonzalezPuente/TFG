@@ -1,0 +1,182 @@
+%% ============================================================
+%% gantt_tfg.tex
+%% Diagrama de Gantt – TFG HCAI Dashboard
+%% Compilar con: pdflatex gantt_tfg.tex
+%% ============================================================
+%\documentclass[a4paper]{article}
+
+\usepackage[
+    landscape,
+    left=1.2cm, right=1.2cm,
+    top=2cm,    bottom=1.5cm
+]{geometry}
+
+\usepackage{pgfgantt}
+\usepackage{xcolor}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{caption}
+
+\pagestyle{empty}
+
+%% ── Color palette ────────────────────────────────────────────────────────────
+%%   Inspired by the reference Gantt (dark WP headers, colored sub-tasks)
+\definecolor{wpDark}   {HTML}{3D3D3D}   % WP header bars
+\definecolor{it1Dark}  {HTML}{C0603A}   % Iteración 1 — dark orange
+\definecolor{it1Light} {HTML}{F4C4A8}   % Iteración 1 — light salmon
+\definecolor{it2Dark}  {HTML}{1565C0}   % Iteración 2 — dark blue
+\definecolor{it2Light} {HTML}{90CAF9}   % Iteración 2 — light blue
+\definecolor{it3Dark}  {HTML}{6A1B9A}   % Iteración 3 — dark purple
+\definecolor{it3Light} {HTML}{CE93D8}   % Iteración 3 — light lavender
+\definecolor{docDark}  {HTML}{2E7D32}   % Documentación — dark green
+\definecolor{docLight} {HTML}{A5D6A7}   % Documentación — light green
+\definecolor{pinkFinal}{HTML}{E91E8C}   % Correcciones finales
+\definecolor{mileRed}  {HTML}{C62828}   % Milestone vertical lines
+
+%\begin{document}
+
+\begin{figure}[htbp]
+\centering
+
+\begin{ganttchart}[
+    %% ── Canvas ──────────────────────────────────────────────
+    canvas/.append style      = {fill=white, draw=gray!35, line width=0.6pt},
+    hgrid style/.style        = {draw=gray!20, line width=0.4pt},
+    vgrid                     = {*{1}{draw=gray!20, line width=0.4pt}},
+    %% ── Title row ───────────────────────────────────────────
+    title/.append style       = {fill=gray!12, draw=gray!35},
+    title label font          = \bfseries\small,
+    include title in canvas   = false,
+    %% ── Task label area ─────────────────────────────────────
+    bar label font            = \small,
+    bar label node/.append style = {
+        left=4pt, align=right, text width=5.4cm
+    },
+    group label font          = \bfseries\small,
+    group label node/.append style = {
+        left=4pt, align=right, text width=5.4cm
+    },
+    milestone label font      = \itshape\small,
+    milestone label node/.append style = {left=4pt},
+    %% ── Dimensions ──────────────────────────────────────────
+    y unit title  = 0.52cm,
+    y unit chart  = 0.60cm,
+    x unit        = 0.52cm,
+    %% ── Bar / Group / Milestone geometry ────────────────────
+    bar height        = 0.55,
+    bar top shift     = 0.225,
+    group height      = 0.40,
+    group top shift   = 0.35,
+    milestone height  = 0.65,
+    milestone top shift = 0.18,
+    %% ── Default styles ──────────────────────────────────────
+    bar/.append style       = {rounded corners=2pt},
+    group/.append style     = {draw=none, fill=wpDark},
+    milestone/.append style = {fill=mileRed, draw=mileRed, shape=diamond},
+    %% ── Vertical milestone lines ─────────────────────────────
+    vrule/.style = {draw=mileRed, very thick},
+    vrule label node/.append style = {
+        anchor=north west,
+        rotate=35,
+        font=\scriptsize\itshape,
+        text=mileRed,
+        below=4pt
+    },
+]{1}{26}
+
+%% ── Header rows ──────────────────────────────────────────────────────────────
+\gantttitle{\textbf{Semana}}{26} \\
+\gantttitlelist{1,...,26}{1} \\
+
+%% ════════════════════════════════════════════════════════════════════════════
+%%  WP1: ANÁLISIS Y PLANIFICACIÓN   |  S1–S6
+%% ════════════════════════════════════════════════════════════════════════════
+\ganttgroup{\textbf{WP1: Análisis y Planificación}}{1}{6} \\
+
+\ganttbar[bar/.append style={fill=it1Dark!75}]
+    {Bibliografía e introducción HCAI}{1}{4} \\
+
+\ganttbar[bar/.append style={fill=it1Dark!45}]
+    {Análisis de requisitos}{3}{5} \\
+
+\ganttbar[bar/.append style={fill=it1Dark!60}]
+    {Diseño de arquitectura del sistema}{4}{6} \\
+
+%% ════════════════════════════════════════════════════════════════════════════
+%%  WP2: ITERACIÓN 1 — MECANISMO HCAI   |  S5–S13
+%% ════════════════════════════════════════════════════════════════════════════
+\ganttgroup{\textbf{WP2: Iteración 1 — Mecanismo HCAI}}{5}{13} \\
+
+\ganttbar[bar/.append style={fill=it1Dark}]
+    {Diseño encuesta multi-paso}{5}{7} \\
+
+\ganttbar[bar/.append style={fill=it1Light}]
+    {Backend: surveys y log endpoints}{6}{11} \\
+
+\ganttbar[bar/.append style={fill=it1Dark!80}]
+    {Frontend: flujo de evaluación}{8}{13} \\
+
+%% ════════════════════════════════════════════════════════════════════════════
+%%  WP3: ITERACIÓN 2 — DASHBOARD VISUAL   |  S11–S19
+%% ════════════════════════════════════════════════════════════════════════════
+\ganttgroup{\textbf{WP3: Iteración 2 — Dashboard Visual}}{11}{19} \\
+
+\ganttbar[bar/.append style={fill=it2Dark}]
+    {Procesamiento de logs}{11}{14} \\
+
+\ganttbar[bar/.append style={fill=it2Light}]
+    {Dashboard metrics (backend)}{12}{17} \\
+
+\ganttbar[bar/.append style={fill=it2Dark!70}]
+    {Visualizaciones y KPIs (Recharts)}{14}{19} \\
+
+%% ════════════════════════════════════════════════════════════════════════════
+%%  WP4: ITERACIÓN 3 — SEGURIDAD, PRUEBAS Y UX   |  S18–S24
+%% ════════════════════════════════════════════════════════════════════════════
+\ganttgroup{\textbf{WP4: Iteración 3 — Seguridad, Pruebas y UX}}{18}{24} \\
+
+\ganttbar[bar/.append style={fill=it3Dark}]
+    {Autenticación y control de acceso}{18}{20} \\
+
+\ganttbar[bar/.append style={fill=it3Light}]
+    {Suite de pruebas (pytest + RTL)}{19}{23} \\
+
+\ganttbar[bar/.append style={fill=it3Dark!65}]
+    {Refinamiento UX y generador de informes}{21}{24} \\
+
+%% ════════════════════════════════════════════════════════════════════════════
+%%  WP5: GESTIÓN DOCUMENTAL   |  S1–S26
+%% ════════════════════════════════════════════════════════════════════════════
+\ganttgroup{\textbf{WP5: Gestión Documental}}{1}{26} \\
+
+\ganttbar[bar/.append style={fill=docDark}]
+    {Redacción de la memoria (continuo)}{1}{25} \\
+
+\ganttbar[bar/.append style={fill=docLight}]
+    {Cap. 1--2: Introducción y Requisitos}{1}{6} \\
+
+\ganttbar[bar/.append style={fill=docLight!85}]
+    {Cap. 3--4: Metodología y Diseño}{6}{17} \\
+
+\ganttbar[bar/.append style={fill=docLight!65}]
+    {Cap. 4--5: Desarrollo y Evaluación}{14}{24} \\
+
+\ganttbar[bar/.append style={fill=pinkFinal}]
+    {\textbf{Correcciones finales}}{24}{26} \\
+
+%% ── Milestone vertical lines ─────────────────────────────────────────────────
+%%   Each \ganttvrule draws a red vertical line + rotated label at the bottom.
+\ganttvrule{Fin análisis}{6}
+\ganttvrule{Fin iteración 1}{13}
+\ganttvrule{Versión funcional}{19}
+\ganttvrule{Fin desarrollo}{24}
+\ganttvrule{Entrega final}{26}
+
+\end{ganttchart}
+
+\caption{Diagrama de Gantt del Trabajo de Fin de Grado}
+\label{fig:gantt}
+\end{figure}
+
+%\end{document}

@@ -15,12 +15,12 @@ router = APIRouter(prefix="/api", tags=["surveys"])
 
 @router.post("/submit-survey")
 def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_db)):
-    # 0. Verify the experiment exists
+    # Verify the experiment exists
     prueba = db.query(Prueba).filter(Prueba.id == datos.prueba_id).first()
     if not prueba:
         raise HTTPException(status_code=404, detail="Prueba no encontrada")
 
-    # 1. Persist subjective survey
+    # Persist subjective survey
     nueva_encuesta = EncuestaLog(
         prueba_id  = prueba.id,
         session_id = datos.session_id,
@@ -29,11 +29,8 @@ def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_d
     db.add(nueva_encuesta)
     db.flush()   # make session_id available as FK before inserting events
 
-    # 2. Persist raw events
+    # Persist raw events
     total_errores    = 0
-    tiempo_total_ms  = 0
-    num_eventos      = len(datos.log_file)
-
     for evento in datos.log_file:
         db.add(EventoLog(
             session_id = datos.session_id,
@@ -42,10 +39,15 @@ def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_d
             timestamp  = evento.timestamp,
             properties = evento.properties,
         ))
-        total_errores   += evento.properties.get("errors", 0)
-        tiempo_total_ms += evento.properties.get("time_to_complete", 0)
+        total_errores += evento.properties.get("errors", 0)
 
-    # 3. Persist consolidated objective log
+    num_eventos = len(datos.log_file)
+    if num_eventos > 0:
+        tiempo_total_sec = (datos.log_file[-1].timestamp - datos.log_file[0].timestamp).total_seconds()
+    else:
+        tiempo_total_sec = 0
+
+    # Persist consolidated objective log
     accuracy_calculada = (
         max(0.0, 1.0 - (total_errores / num_eventos))
         if num_eventos > 0 else 0.0
@@ -54,7 +56,7 @@ def guardar_encuesta_y_log(datos: SubmissionPayload, db: Session = Depends(get_d
         session_id        = datos.session_id,
         prueba_id         = prueba.id,
         usuario_id        = datos.log_file[0].user_id if datos.log_file else "unknown",
-        tiempo_total      = tiempo_total_ms / 1000,
+        tiempo_total      = tiempo_total_sec,
         numero_clics      = num_eventos,
         errores_cometidos = total_errores,
         accuracy          = accuracy_calculada,

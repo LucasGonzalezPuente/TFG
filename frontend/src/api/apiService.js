@@ -29,12 +29,7 @@ export async function crearPrueba(payload) {
   return res.json(); // { status, token_version, nombre_sistema, link_generado }
 }
 
-// ─── Usuarios ─────────────────────────────────────────────────────────────────
-export async function fetchUsuariosDisponibles() {
-  const res = await fetch(`${BASE}/usuarios-disponibles`);
-  if (!res.ok) throw new Error('Error cargando usuarios');
-  return res.json(); // [{ id, nombre }]
-}
+
 
 // ─── Encuesta / Survey ───────────────────────────────────────────────────────
 export async function submitSurvey(payload) {

@@ -17,7 +17,7 @@ from .database import engine, Base
 from . import models  # noqa: F401
 
 # Routers
-from .routers import auth, pruebas, surveys, logs, dashboard
+from .routers import auth, pruebas, surveys, dashboard
 
 # ── Create tables ─────────────────────────────────────────────────────────────
 Base.metadata.create_all(bind=engine)
@@ -37,5 +37,4 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(pruebas.router)
 app.include_router(surveys.router)
-app.include_router(logs.router)
 app.include_router(dashboard.router)

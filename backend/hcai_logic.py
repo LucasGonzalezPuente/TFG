@@ -11,13 +11,13 @@ SCALES: dict[str, int] = {"a": 100, "b": 75, "c": 50, "d": 25, "e": 0}
 def calcular_score_hcai(respuestas: dict) -> dict:
     """
     Given a flat dict of survey answers, returns aggregated HCAI dimensions:
-      conf  – average trust score (p1–p4, Likert scale)
-      expl  – average explainability score (p5–p15, Likert scale)
+      conf  – average trust score (p1–p8, Likert scale)
+      expl  – average explainability score (p9–p15, Likert scale)
       cogn  – average cognitive load (nasa_* items, 0–100 slider)
 
     Rules:
       • Keys starting with "nasa" → cognitive load (raw int)
-      • Keys starting with "p"    → trust (p1–p4) or explainability (p5+)
+      • Keys starting with "p"    → trust (p1–p8) or explainability (p9+)
     """
     scores: dict[str, list] = {"confianza": [], "explicabilidad": [], "carga_cognitiva": []}
 
@@ -32,7 +32,7 @@ def calcular_score_hcai(respuestas: dict) -> dict:
             val = SCALES.get(value, 50)
             try:
                 num = int(key.split("_")[0][1:])   # e.g. "p1_confianza" → 1
-                bucket = "confianza" if num <= 4 else "explicabilidad"
+                bucket = "confianza" if num <= 8 else "explicabilidad"
             except (IndexError, ValueError):
                 bucket = "explicabilidad"
             scores[bucket].append(val)

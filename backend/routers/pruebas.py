@@ -20,7 +20,6 @@ def crear_prueba(datos: PruebaSchema, db: Session = Depends(get_db)):
     nueva = Prueba(
         nombre_sistema         = datos.nombre_sistema,
         descripcion_tarea      = datos.descripcion_tarea,
-        usuarios_asignados     = datos.usuarios,
         metricas_seleccionadas = datos.metricas,
         token_version          = token,
     )
@@ -48,11 +47,6 @@ def listar_pruebas(db: Session = Depends(get_db)):
         for p in pruebas
     ]
 
-
-@router.get("/usuarios-disponibles")
-def get_users():
-    # Static list — replace with a DB query when user management is added.
-    return [{"id": "usr_001", "nombre": "Ana"}, {"id": "usr_002", "nombre": "Carlos"}]
 
 
 @router.get("/compare-tests/{token_a}/{token_b}")

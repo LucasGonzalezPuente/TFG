@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import '../App.css';
-import { fetchUsuariosDisponibles, crearPrueba } from '../api/apiService';
+import { crearPrueba } from '../api/apiService';
 import { METRICAS_AI } from '../constants/surveyData';
 
 // ── Styles (reused across the form) ──────────────────────────────────────────
 const cardStyle = {
-  background:   'var(--card-dark)',
-  border:       '1px solid var(--border-color)',
-  padding:      '30px',
+  background: 'var(--card-dark)',
+  border: '1px solid var(--border-color)',
+  padding: '30px',
   borderRadius: '16px',
-  boxShadow:    '0 10px 30px rgba(0,0,0,0.3)',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
 };
 const labelStyle = { fontWeight: '700', display: 'block', marginBottom: '8px', color: 'var(--text-main)' };
 const inputStyle = {
@@ -22,28 +22,15 @@ const inputStyle = {
 
 function EvaluatorPanel() {
   const [form, setForm] = useState({
-    nombre_sistema: '', descripcion_tarea: '', usuarios: [], metricas: {},
+    nombre_sistema: '', descripcion_tarea: '', metricas: {},
   });
-  const [usuariosDisponibles, setUsuariosDisponibles] = useState([]);
   const [resultado, setResultado] = useState(null);
-  const [cargando, setCargando]   = useState(false);
-
-  useEffect(() => {
-    fetchUsuariosDisponibles()
-      .then(setUsuariosDisponibles)
-      .catch(err => console.error('Error cargando usuarios:', err));
-  }, []);
+  const [cargando, setCargando] = useState(false);
 
   const handleInputChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
 
-  const toggleUsuario = (id) =>
-    setForm(prev => ({
-      ...prev,
-      usuarios: prev.usuarios.includes(id)
-        ? prev.usuarios.filter(u => u !== id)
-        : [...prev.usuarios, id],
-    }));
+
 
   const handleMetricChange = (id, valor) => {
     const nuevasMetricas = { ...form.metricas };
@@ -92,7 +79,7 @@ function EvaluatorPanel() {
             className="secondary-btn"
             onClick={() => {
               setResultado(null);
-              setForm({ nombre_sistema: '', descripcion_tarea: '', usuarios: [], metricas: {} });
+              setForm({ nombre_sistema: '', descripcion_tarea: '', metricas: {} });
             }}
             style={{ padding: '10px 20px', cursor: 'pointer' }}
           >
@@ -139,30 +126,11 @@ function EvaluatorPanel() {
           />
         </div>
 
-        {/* 3. Usuarios */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={labelStyle}>3. Usuarios Invitados</label>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
-            {usuariosDisponibles.map(u => (
-              <button
-                key={u.id} type="button" onClick={() => toggleUsuario(u.id)}
-                style={{
-                  padding: '8px 15px', borderRadius: '20px',
-                  border: '1px solid var(--accent-primary)',
-                  backgroundColor: form.usuarios.includes(u.id) ? 'var(--accent-primary)' : 'transparent',
-                  color: form.usuarios.includes(u.id) ? 'white' : 'var(--accent-primary)',
-                  cursor: 'pointer', transition: 'all 0.2s',
-                }}
-              >
-                {u.nombre}
-              </button>
-            ))}
-          </div>
-        </div>
+
 
         {/* 4. Métricas */}
         <div style={{ marginBottom: '30px' }}>
-          <label style={labelStyle}>4. Ground Truth (Métricas Técnicas de la IA)</label>
+          <label style={labelStyle}>3. Ground Truth (Métricas Técnicas de la IA)</label>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '12px' }}>
             Introduce los valores reales del sistema evaluado. Aparecerán en el Dashboard para triangulación.
           </p>

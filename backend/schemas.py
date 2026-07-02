@@ -15,7 +15,6 @@ class LoginSchema(BaseModel):
 class PruebaSchema(BaseModel):
     nombre_sistema:   str
     descripcion_tarea: str
-    usuarios:         List[str]
     metricas:         Dict[str, float]
 
 
@@ -53,5 +52,4 @@ class MetricasObjetivasSchema(BaseModel):
     auc_roc:           Optional[float] = None
     rmse:              Optional[float] = None
     mae:               Optional[float] = None
-    mape:              Optional[float] = None
     r2:                Optional[float] = None

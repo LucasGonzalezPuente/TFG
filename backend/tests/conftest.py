@@ -80,7 +80,6 @@ def prueba_fixture(db):
     prueba = models.Prueba(
         nombre_sistema="Sistema Test",
         descripcion_tarea="Tarea de prueba unitaria",
-        usuarios_asignados=["usr_001"],
         metricas_seleccionadas={"accuracy": 0.85},
         token_version="tok_test",
         fecha_creacion=datetime(2025, 1, 15, 10, 0, 0),

@@ -14,7 +14,7 @@ export const darkTooltip = {
   fontSize: '0.85rem',
 };
 
-const EVENT_COLORS = ['#6366f1','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16'];
+const EVENT_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316', '#84cc16'];
 
 export function SectionTitle({ icon, title }) {
   return (
@@ -37,13 +37,13 @@ export function ChartHeader({ title, sub }) {
 // ── Available parameters for the session line chart ───────────────────────────
 
 const PARAM_OPTIONS = [
-  { key: 'confianza',         label: 'Confianza',        color: '#6366f1', unit: '%' },
-  { key: 'explicabilidad',    label: 'Explicabilidad',   color: '#10b981', unit: '%' },
-  { key: 'carga_cognitiva',   label: 'Carga Cognitiva',  color: '#f59e0b', unit: '%' },
-  { key: 'accuracy',          label: 'Accuracy IA',      color: '#06b6d4', unit: '%' },
-  { key: 'errores_detectados',label: 'Errores',          color: '#ef4444', unit: ''  },
-  { key: 'tiempo',            label: 'Tiempo (s)',        color: '#f97316', unit: 's' },
-  { key: 'hcai_score',        label: 'HCAI Score',       color: '#8b5cf6', unit: ''  },
+  { key: 'confianza', label: 'Confianza', color: '#6366f1', unit: '%' },
+  { key: 'explicabilidad', label: 'Explicabilidad', color: '#10b981', unit: '%' },
+  { key: 'carga_cognitiva', label: 'Carga Cognitiva', color: '#f59e0b', unit: '%' },
+  { key: 'accuracy', label: 'Success Rate', color: '#06b6d4', unit: '%' },
+  { key: 'errores_detectados', label: 'Errores', color: '#ef4444', unit: '' },
+  { key: 'tiempo', label: 'Tiempo (s)', color: '#f97316', unit: 's' },
+  { key: 'hcai_score', label: 'HCAI Score', color: '#8b5cf6', unit: '' },
 ];
 
 // ── Subjective section ────────────────────────────────────────────────────────
@@ -167,17 +167,17 @@ export function SubjectiveCharts({ data }) {
           <ChartHeader title="Triangulación de métricas" sub="Promedio global de todas las sesiones" />
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={[
-              { name: 'Confianza',  val: data.subjetivo.confianza },
+              { name: 'Confianza', val: data.subjetivo.confianza },
               { name: 'Explicab.', val: data.subjetivo.explicabilidad },
-              { name: 'Carga Cog.',val: data.subjetivo.carga_cognitiva },
-              { name: 'Accuracy',  val: data.objetivo.accuracy_real_promedio },
+              { name: 'Carga Cog.', val: data.subjetivo.carga_cognitiva },
+              { name: 'Success Rate', val: data.objetivo.accuracy_real_promedio },
             ]}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
               <XAxis dataKey="name" stroke="#94a3b8" tick={{ fontSize: 11 }} />
               <YAxis stroke="#94a3b8" domain={[0, 100]} />
               <Tooltip contentStyle={darkTooltip} cursor={{ fill: '#2d3748' }} />
               <Bar dataKey="val" radius={[4, 4, 0, 0]}>
-                {[0,1,2,3].map((_, i) => (
+                {[0, 1, 2, 3].map((_, i) => (
                   <Cell key={i} fill={i === 2 ? '#f59e0b' : i === 3 ? '#10b981' : '#6366f1'} />
                 ))}
               </Bar>
@@ -201,8 +201,8 @@ export function ObjectiveCharts({ logData }) {
 
   const metEvalChart = logData.metricas_evaluador
     ? Object.entries(logData.metricas_evaluador)
-        .filter(([k]) => !['rmse', 'mae', 'mape'].includes(k))
-        .map(([k, v]) => ({ name: k.toUpperCase(), val: v }))
+      .filter(([k]) => !['rmse', 'mae', 'mape'].includes(k))
+      .map(([k, v]) => ({ name: k.toUpperCase(), val: v }))
     : [];
 
   return (
@@ -238,8 +238,8 @@ export function ObjectiveCharts({ logData }) {
               <YAxis stroke="#94a3b8" />
               <Tooltip contentStyle={darkTooltip} />
               <Legend />
-              <Bar dataKey="clics"   name="Interacciones" fill="#6366f1" radius={[2,2,0,0]} />
-              <Bar dataKey="errores" name="Errores"        fill="#ef4444" radius={[2,2,0,0]} />
+              <Bar dataKey="clics" name="Interacciones" fill="#6366f1" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="errores" name="Errores" fill="#ef4444" radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -249,16 +249,18 @@ export function ObjectiveCharts({ logData }) {
 
         {/* Scatter: time vs accuracy */}
         <div className="chart-card">
-          <ChartHeader title="Tiempo de sesión vs Accuracy IA" sub="¿Las sesiones más largas obtienen mejor accuracy?" />
+          <ChartHeader title="Tiempo de sesión vs Success Rate" sub="¿Las sesiones más largas obtienen mejor success rate?" />
           <ResponsiveContainer width="100%" height={240}>
             <ScatterChart margin={{ bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
               <XAxis
+                type="number"
                 dataKey="tiempo_s" name="Tiempo (s)" stroke="#94a3b8" tick={{ fontSize: 10 }}
                 label={{ value: 'Tiempo (s)', position: 'insideBottom', fill: '#94a3b8', fontSize: 11, dy: 12 }}
               />
               <YAxis
-                dataKey="accuracy" name="Accuracy (%)" stroke="#94a3b8" domain={[0, 100]} tick={{ fontSize: 10 }}
+                type="number"
+                dataKey="accuracy" name="Success Rate (%)" stroke="#94a3b8" domain={[0, 100]} tick={{ fontSize: 10 }}
                 label={{ value: 'Accuracy %', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11 }}
               />
               <ZAxis range={[70, 70]} />

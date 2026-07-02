@@ -88,7 +88,6 @@ describe('crearPrueba', () => {
   const payload = {
     nombre_sistema: 'Sistema Test',
     descripcion_tarea: 'Tarea de prueba',
-    usuarios: ['usr_001'],
     metricas: { accuracy: 0.9 },
   };
 

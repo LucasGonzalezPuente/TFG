@@ -9,7 +9,6 @@ class TestCrearPrueba:
     PAYLOAD = {
         "nombre_sistema": "Sistema A",
         "descripcion_tarea": "Evaluar recomendaciones",
-        "usuarios": ["usr_001", "usr_002"],
         "metricas": {"accuracy": 0.85, "f1_score": 0.80},
     }
 
@@ -55,7 +54,6 @@ class TestListarPruebas:
         client.post("/api/crear-prueba", json={
             "nombre_sistema": "Sistema B",
             "descripcion_tarea": "Tarea B",
-            "usuarios": ["usr_001"],
             "metricas": {"accuracy": 0.9},
         })
         response = client.get("/api/pruebas-realizadas")
@@ -73,22 +71,7 @@ class TestListarPruebas:
         assert "fecha_creacion" in item
 
 
-class TestUsuariosDisponibles:
-    def test_returns_200(self, client):
-        response = client.get("/api/usuarios-disponibles")
-        assert response.status_code == 200
 
-    def test_returns_non_empty_list(self, client):
-        response = client.get("/api/usuarios-disponibles")
-        data = response.json()
-        assert isinstance(data, list)
-        assert len(data) > 0
-
-    def test_each_user_has_id_and_nombre(self, client):
-        response = client.get("/api/usuarios-disponibles")
-        for user in response.json():
-            assert "id" in user
-            assert "nombre" in user
 
 
 class TestCompareTests:

@@ -45,7 +45,7 @@ export function KPIRow({ data }) {
       <KPICard label="Sesiones Realizadas" value={data.total_usuarios} />
       <KPICard label="Gap Calibración"     value={`${gap}%`} color="var(--warning)" />
       <KPICard
-        label="Accuracy IA (log)"
+        label="Success Rate (log)"
         value={`${data.objetivo.accuracy_real_promedio}%`}
         color="var(--accent-secondary)"
       />

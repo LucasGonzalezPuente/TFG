@@ -13,7 +13,7 @@ import { RankingList, SessionTable } from './dashboard/SessionTable';
 function Dashboard() {
   const [pruebas, setPruebas] = useState([]);
   const [selectedPruebaId, setSelectedPruebaId] = useState('');
-  const [data, setData]       = useState(null);
+  const [data, setData] = useState(null);
   const [logData, setLogData] = useState(null);
   const [cargando, setCargando] = useState(false);
 
@@ -154,7 +154,7 @@ function Dashboard() {
           </select>
         </div>
         <button className="primary-btn" onClick={() => generarInformeTFG(data, logData)}>
-          📄 Generar Informe TFG
+          📄 Generar Informe
         </button>
       </header>
 

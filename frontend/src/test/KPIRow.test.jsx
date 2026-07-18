@@ -68,9 +68,9 @@ describe('KPIRow', () => {
     expect(screen.getByText('Gap Calibración')).toBeInTheDocument();
   });
 
-  it('renders "Accuracy IA (log)" KPI', () => {
+  it('renders "Success Rate (log)" KPI', () => {
     render(<KPIRow data={mockData} />);
-    expect(screen.getByText('Accuracy IA (log)')).toBeInTheDocument();
+    expect(screen.getByText('Success Rate (log)')).toBeInTheDocument();
   });
 
   it('computes calibration gap correctly', () => {

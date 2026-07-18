@@ -66,7 +66,7 @@ export function generarInformeTFG(data, logData) {
   <div class="kpi-grid">
     <div class="kpi"><div class="val">${n}</div><div class="lbl">Sesiones</div></div>
     <div class="kpi"><div class="val">${data.subjetivo.confianza}%</div><div class="lbl">Confianza media</div></div>
-    <div class="kpi"><div class="val">${data.objetivo.accuracy_real_promedio}%</div><div class="lbl">Accuracy IA (log)</div></div>
+    <div class="kpi"><div class="val">${data.objetivo.accuracy_real_promedio}%</div><div class="lbl">Success Rate (log)</div></div>
     <div class="kpi"><div class="val">${(data.subjetivo.confianza - data.objetivo.accuracy_real_promedio).toFixed(1)}%</div><div class="lbl">Gap calibración</div></div>
   </div>
 
@@ -96,7 +96,7 @@ export function generarInformeTFG(data, logData) {
     <thead>
       <tr>
         <th>ID Sesión</th><th>Fecha</th><th>Confianza</th><th>Explicabilidad</th>
-        <th>Carga Cog.</th><th>Accuracy IA</th><th>Errores</th><th>HCAI Score</th>
+        <th>Carga Cog.</th><th>Success Rate</th><th>Errores</th><th>HCAI Score</th>
       </tr>
     </thead>
     <tbody>${filas}</tbody>

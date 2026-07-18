@@ -53,7 +53,7 @@ describe('SessionTable', () => {
     expect(screen.getByText('Fecha')).toBeInTheDocument();
     expect(screen.getByText('Confianza')).toBeInTheDocument();
     expect(screen.getByText('Explicabilidad')).toBeInTheDocument();
-    expect(screen.getByText('Accuracy IA')).toBeInTheDocument();
+    expect(screen.getByText('Success Rate')).toBeInTheDocument();
     expect(screen.getByText('Errores')).toBeInTheDocument();
     expect(screen.getByText('Tiempo (s)')).toBeInTheDocument();
     expect(screen.getByText('HCAI Score')).toBeInTheDocument();

@@ -55,7 +55,7 @@ export function SessionTable({ detalles }) {
           <thead>
             <tr>
               <th>ID Sesión</th><th>Fecha</th><th>Confianza</th><th>Explicabilidad</th>
-              <th>Carga Cog.</th><th>Accuracy IA</th><th>Errores</th><th>Tiempo (s)</th><th>HCAI Score</th>
+              <th>Carga Cog.</th><th>Success Rate</th><th>Errores</th><th>Tiempo (s)</th><th>HCAI Score</th>
             </tr>
           </thead>
           <tbody>
